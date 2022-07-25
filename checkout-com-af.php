@@ -65,11 +65,8 @@ add_action('wp_footer', function () {
         // get user IP
         $user_ip = isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? $_SERVER['HTTP_CF_CONNECTING_IP'] : $_SERVER['REMOTE_ADDR'];
 
-        // check if user ip is blocked
-        $blocked_ip = isset($_COOKIE['ccom_banned_ip']) ? $_COOKIE['ccom_banned_ip'] : false;
-
         // if current user ip === blocked cookie ip, remove checkout.com payment method
-        if ($blocked_ip && $user_ip === $blocked_ip) : ?>
+        if (isset($_COOKIE['ccom_banned_ip']) && $user_ip == $_COOKIE['ccom_banned_ip']) : ?>
 
             <script id="ccom-af-block">
                 jQuery(document).ready(function($) {
@@ -99,7 +96,7 @@ add_action('wp_footer', function () {
             $response_obj = json_decode($response);
 
             // if response is successful, decrement session checkout attempts count if present and above 1
-            if ($response_obj->success === 1 && isset($_SESSION['ccom_checkout_attempts']) && $_SESSION['ccom_checkout_attempts'] > 1) :
+            if ($response_obj->success == 1 && isset($_SESSION['ccom_checkout_attempts']) && $_SESSION['ccom_checkout_attempts'] > 1) :
 
                 // decrement session count
                 $_SESSION['ccom_checkout_attempts'] -= 1;
@@ -111,8 +108,10 @@ add_action('wp_footer', function () {
                     $_SESSION['ccom_rc_subs']  = 1;
                 endif;
 
+            endif;
+
             // if recaptcha response not successful, ban user straightaway
-            elseif ($response_obj->success !== 1) :
+            if ($response_obj->success != 1) :
 
                 // ban user ip for a day
                 setcookie('ccom_banned_ip', isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? $_SERVER['HTTP_CF_CONNECTING_IP'] : $_SERVER['REMOTE_ADDR'], time() + 86400, "/");
@@ -161,12 +160,7 @@ add_action('wp_footer', function () {
             <div id="rcv2checknote" class="alert alert-info text-center"><?php echo __('Please prove that you are human:', 'woocommerce'); ?></div>
 
             <form id="rcv2-ccom-af-form" method="post" action="">
-
                 <div class="g-recaptcha" data-sitekey="<?php echo RC_SITE_KEY; ?>"></div>
-
-                <input id="rc-user-id" name="rc-user-id" value="<?php echo $user_id; ?>" type="hidden">
-                <input id="rc-user-id" name="rc-user-id" value="<?php echo $user_ip; ?>" type="hidden">
-
                 <input id="rc-submit" class="button button-primary" name="rc-submit" type="submit" value="<?php echo __('Submit', 'woocommerce'); ?>">
             </form>
         </div>
@@ -203,7 +197,7 @@ add_action('wp_footer', function () {
 
                     $.post('<?php echo admin_url('admin-ajax.php') ?>', data, function(response) {
 
-                        // console.log(response);
+                        console.log(response);
 
                         // if response is trigger recaptcha, show recaptcha modal and bail
                         if (response === 'trigger recaptcha') {
@@ -299,17 +293,14 @@ function ccom_fraud_check_ajax() {
         $_SESSION['ccom_checkout_attempts'] = 1;
     endif;
 
-    // retrieve checkout attempts
-    $co_attempts = $_SESSION['ccom_checkout_attempts'];
-
     // if checkout attempts >= 2, trigger recaptcha modal
-    if ($co_attempts >= 2) :
+    if ($_SESSION['ccom_checkout_attempts'] >= 2) :
         wp_send_json('trigger recaptcha');
         wp_die();
     endif;
 
     // if checkout attempts === 5, hide payment method and ban user id/user ip for a day
-    if ($co_attempts === $limit) {
+    if ($_SESSION['ccom_checkout_attempts'] == $limit) {
 
         // ban user ip for a day
         setcookie('ccom_banned_ip', $_POST['user_ip'], time() + 86400, "/");
