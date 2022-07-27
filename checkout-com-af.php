@@ -173,44 +173,47 @@ add_action('wp_footer', function () {
                 // get request url
                 var request_url = settings.url;
 
-                // string to search for in url
+                // get ajax url check for presence of checkout
                 var search = 'wc-ajax=checkout';
+                var url_found = request_url.indexOf(search);
 
-                // search result
-                var found = request_url.search(search);
+                // if is checkout ajax
+                if (url_found > 0) {
+                    
+                    // get payment method and check for presence of checkout.com
+                    var data_string = settings.data;
+                    var ccom_found = data_string.indexOf('wc_checkout_com_cards');
+                    
+                    // transaction result
+                    var response_json = xhr.responseJSON;
 
-                // transaction result
-                var response_json = xhr.responseJSON;
+                    // if transaction result is failure and checkout.com is active, update session
+                    if (response_json.result === 'failure' && ccom_found > 0) {
 
-                // whether checkout.com payment method is active or not
-                var ccom_active = $('input#payment_method_wc_checkout_com_cards').is(':checked');
+                        data = {
+                            '_ajax_nonce': '<?php echo wp_create_nonce('ccom anti fraud') ?>',
+                            'action': 'ccom_fraud_check_ajax',
+                            'user_ip': '<?php echo isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? $_SERVER['HTTP_CF_CONNECTING_IP'] : $_SERVER['REMOTE_ADDR']; ?>',
+                            'user_id': '<?php get_current_user_id() > 0 ? print get_current_user_id() : 'none'; ?>'
+                        }
 
-                // if is checkout ajax, transaction result is failure and checkout.com is active, update session
-                if (found > 0 && response_json.result === 'failure' && ccom_active === true) {
+                        $.post('<?php echo admin_url('admin-ajax.php') ?>', data, function(response) {
 
-                    data = {
-                        '_ajax_nonce': '<?php echo wp_create_nonce('ccom anti fraud') ?>',
-                        'action': 'ccom_fraud_check_ajax',
-                        'user_ip': '<?php echo isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? $_SERVER['HTTP_CF_CONNECTING_IP'] : $_SERVER['REMOTE_ADDR']; ?>',
-                        'user_id': '<?php get_current_user_id() > 0 ? print get_current_user_id() : 'none'; ?>'
+                            console.log(response);
+
+                            // if response is trigger recaptcha, show recaptcha modal and bail
+                            if (response === 'trigger recaptcha') {
+                                $('#rcv2-overlay, #rcv2-modal').show();
+                                return
+                            }
+
+                            // if response is remove ccom method, remove checkout.com from payment method list
+                            if (response === 'remove ccom method') {
+                                $(document).find('li.wc_payment_method.payment_method_wc_checkout_com_cards').remove();
+                            }
+
+                        })
                     }
-
-                    $.post('<?php echo admin_url('admin-ajax.php') ?>', data, function(response) {
-
-                        console.log(response);
-
-                        // if response is trigger recaptcha, show recaptcha modal and bail
-                        if (response === 'trigger recaptcha') {
-                            $('#rcv2-overlay, #rcv2-modal').show();
-                            return
-                        }
-
-                        // if response is remove ccom method, remove checkout.com from payment method list
-                        if (response === 'remove ccom method') {
-                            $(document).find('li.wc_payment_method.payment_method_wc_checkout_com_cards').remove();
-                        }
-
-                    })
                 }
             });
         </script>
@@ -278,10 +281,6 @@ add_action('wp_ajax_ccom_fraud_check_ajax', 'ccom_fraud_check_ajax');
 function ccom_fraud_check_ajax() {
 
     check_ajax_referer('ccom anti fraud');
-
-    // wp_send_json($_POST);
-
-    // wp_die();
 
     // set checkout attempt limit
     $limit = CCOM_RETRY_LIMIT;
