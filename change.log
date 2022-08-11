@@ -1,0 +1,5 @@
+11 August 2022
+
+-Added reCaptcha support for Payoneer payment gateway for WooCommerce
+-Added logging via order note for Payoneer transactions which has a status other than approved
+-Some minor fixes/changes to Checkout.com implementation
